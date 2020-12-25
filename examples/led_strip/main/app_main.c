@@ -461,7 +461,7 @@ static int led_strip_write(hap_write_data_t write_data[], int count,
             // }
         } else if (!strcmp(hap_char_get_type_uuid(write->hc), HAP_CHAR_UUID_BRIGHTNESS)) {
             ESP_LOGI(TAG, "Received Write for Light Brightness %d", write->val.i);
-            segments[num][2] = write->val.i / 100;
+            segments[num][2] = write->val.i;
     
             if (segment_on[num] == true)
             {
@@ -566,14 +566,15 @@ static void leds_thread_entry(void *p)
         if(xQueueReceive(led_queue,&segments,(TickType_t )(1000/portTICK_PERIOD_MS)))
         {
             ESP_LOGI(TAG, "leds_changed %d", rc);
-            for(int segment = 0; segment < NUM_LED_SEGMENTS - 1; segment++)
+            int start_at_0 = 0;
+            for(int segment = 0; segment < NUM_LED_SEGMENTS; segment++)
             {
                 int start_at_led = segment_center[segment];
                 int end_at_led = segment_center[segment + 1];
                 int leds_in_segment = end_at_led - start_at_led;
-                int start_at_0 = 1;
+                
                 if(segment  == 0){
-                    start_at_0 = 0;
+                    start_at_0++;
                 }
                 for(int led = start_at_0; led < leds_in_segment; led++)
                 {
