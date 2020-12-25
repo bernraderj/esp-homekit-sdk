@@ -567,20 +567,23 @@ static void leds_thread_entry(void *p)
         {
             ESP_LOGI(TAG, "leds_changed %d", rc);
             int start_at_0 = 0;
-            for(int segment = 0; segment < NUM_LED_SEGMENTS; segment++)
+            for(int segment = 0; segment < NUM_LED_SEGMENTS - 1; segment++)
             {
                 int start_at_led = segment_center[segment];
                 int end_at_led = segment_center[segment + 1];
-                int leds_in_segment = end_at_led - start_at_led;
+                int leds_in_segment = end_at_led - start_at_led + 1;
                 
-                if(segment  == 0){
+                if(segment == 0){
                     start_at_0++;
                 }
+                uint32_t current_hue_step_size = (segments[segment + 1][0] - segments[segment][0]) / leds_in_segment;
+                uint32_t current_saturation_step_size = (segments[segment + 1][1] - segments[segment][1]) / leds_in_segment;
+                uint32_t current_intensity_step_size = (segments[segment + 1][2] - segments[segment][2]) / leds_in_segment;
                 for(int led = start_at_0; led < leds_in_segment; led++)
                 {
-                    uint32_t current_hue = segments[segment][0] + (segments[segment + 1][0] - segments[segment][0]) / leds_in_segment * led;
-                    uint32_t current_saturation = segments[segment][1] + (segments[segment + 1][1] - segments[segment][1]) / leds_in_segment * led;
-                    uint32_t current_intensity = segments[segment][2] + (segments[segment + 1][2] - segments[segment][2]) / leds_in_segment * led;
+                    uint32_t current_hue = segments[segment][0] + current_hue_step_size * led;
+                    uint32_t current_saturation = segments[segment][1] + current_saturation_step_size * led;
+                    uint32_t current_intensity = segments[segment][2] + current_intensity_step_size * led;
                     int current_led = start_at_led + led;
                     int rgbw[4];
                     if (current_hue >= 360){
