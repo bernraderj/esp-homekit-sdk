@@ -585,6 +585,8 @@ static void leds_thread_entry(void *p)
                 np_set_pixel_rgbw(&px, current_led, rgbw[0], rgbw[1], rgbw[2], rgbw[3]);                
             }
         }
+        np_show(&px, NEOPIXEL_RMT_CHANNEL);
+
         vTaskDelay(10/portTICK_PERIOD_MS); //wait for a second
     }
     
