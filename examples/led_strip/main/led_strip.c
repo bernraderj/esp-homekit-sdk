@@ -35,8 +35,80 @@
 // #include "driver/ledc.h"
 #include <esp_log.h>
 
+
+#include <driver/rmt.h>
+#include "neopixel.c"
+
+
+#define	NEOPIXEL_PORT	18
+#define	NR_LED		7
+//#define	NR_LED		3
+//#define	NEOPIXEL_WS2812
+#define	NEOPIXEL_SK6812
+#define	NEOPIXEL_RMT_CHANNEL    RMT_CHANNEL_2
+#define NUM_LED_SEGMENTS 3
+
 static const char *TAG = "led strip";
 
+
+#define DEG_TO_RAD(X) (M_PI*(X)/180)
+
+int segment_center[] = {0,3,6};
+
+pixel_settings_t px;
+	uint32_t		pixels[NR_LED];
+	int		i;
+	int		rc;
+
+uint32_t segment_hue[NUM_LED_SEGMENTS];
+uint32_t segment_saturation[NUM_LED_SEGMENTS];
+uint32_t segment_intensity[NUM_LED_SEGMENTS];
+bool segment_on[NUM_LED_SEGMENTS];
+uint32_t segment_intensity_off[NUM_LED_SEGMENTS];
+
+
+
+void hsi2rgbw(float H, float S, float I, int rgbw[]) {
+  int r, g, b, w;
+  float cos_h, cos_1047_h;
+//   H = fmod(H,360); // cycle H around to 0-360 degrees
+  H = 3.14159*H/(float)180; // Convert to radians.
+  S = S / 100;
+  I = I / 100;
+  S = S>0?(S<1?S:1):0; // clamp S and I to interval [0,1]
+  I = I>0?(I<1?I:1):0;
+  
+  if(H < 2.09439) {
+    cos_h = cos(H);
+    cos_1047_h = cos(1.047196667-H);
+    r = S*255*I/3*(1+cos_h/cos_1047_h);
+    g = S*255*I/3*(1+(1-cos_h/cos_1047_h));
+    b = 0;
+    w = 255*(1-S)*I;
+  } else if(H < 4.188787) {
+    H = H - 2.09439;
+    cos_h = cos(H);
+    cos_1047_h = cos(1.047196667-H);
+    g = S*255*I/3*(1+cos_h/cos_1047_h);
+    b = S*255*I/3*(1+(1-cos_h/cos_1047_h));
+    r = 0;
+    w = 255*(1-S)*I;
+  } else {
+    H = H - 4.188787;
+    cos_h = cos(H);
+    cos_1047_h = cos(1.047196667-H);
+    b = S*255*I/3*(1+cos_h/cos_1047_h);
+    r = S*255*I/3*(1+(1-cos_h/cos_1047_h));
+    g = 0;
+    w = 255*(1-S)*I;
+  }
+  
+  rgbw[0]=r;
+  rgbw[1]=g;
+  rgbw[2]=b;
+  rgbw[3]=w;
+
+}
 
 // static	void test_neopixel()
 // {
@@ -164,9 +236,30 @@ static bool led_strip_set_aim_hsv(int num, uint16_t h, uint16_t s, uint16_t v)
 /**
  * @brief update the led_strip's state
  */
-static void led_strip_update(int num)
+static void led_strip_update()
 {
-    led_strip_set_aim_hsv(num, s_hsb_val.h, s_hsb_val.s, s_hsb_val.b);
+    ESP_LOGI(TAG, "leds_changed");
+            for(int segment = 0; segment < NUM_LED_SEGMENTS - 1; segment++)
+            {
+                int start_at_led = segment_center[segment];
+                int end_at_led = segment_center[segment + 1];
+                int leds_in_segment = end_at_led - start_at_led;
+                int start_at_0 = 1;
+                if(segment  == 0){
+                    start_at_0 = 0;
+                }
+                for(int led = start_at_0; led < leds_in_segment; led++){
+                    uint32_t current_hue = segment_hue[start_at_led] + (segment_hue[end_at_led] - segment_hue[start_at_led]) / leds_in_segment * led;
+                    uint32_t current_saturation = segment_saturation[start_at_led] + (segment_saturation[end_at_led] - segment_saturation[start_at_led]) / leds_in_segment * led;
+                    uint32_t current_intensity = segment_intensity[start_at_led] + (segment_intensity[end_at_led] - segment_intensity[start_at_led]) / leds_in_segment * led;
+                    int current_led = start_at_led + led;
+                    int rgbw[4];
+                    hsi2rgbw(current_hue, current_saturation, current_intensity, &rgbw);
+                    np_set_pixel_rgbw(&px, current_led, rgbw[0], rgbw[1], rgbw[2], rgbw[3]);
+                }
+            }
+            np_show(&px, NEOPIXEL_RMT_CHANNEL);
+    // led_strip_set_aim_hsv(num, s_hsb_val.h, s_hsb_val.s, s_hsb_val.b);
 }
 
 
@@ -218,6 +311,48 @@ void led_strip_init(void)
     // ledc_channel.gpio_num = LEDC_IO_2;
     // ledc_channel_config(&ledc_channel);
     // test_neopixel();
+    rc = neopixel_init(NEOPIXEL_PORT, NEOPIXEL_RMT_CHANNEL);
+	ESP_LOGI(TAG, "neopixel_init rc = %d", rc);
+
+	for	( i = 0 ; i < NR_LED; i ++ )	{
+		pixels[i] = 0;
+	}
+	px.pixels = (uint8_t *)pixels;
+	px.pixel_count = NR_LED;
+#ifdef	NEOPIXEL_WS2812
+	strcpy(px.color_order, "GRB");
+#else
+	strcpy(px.color_order, "GRBW");
+#endif
+
+	memset(&px.timings, 0, sizeof(px.timings));
+	px.timings.mark.level0 = 1;
+	px.timings.space.level0 = 1;
+	px.timings.mark.duration0 = 12;
+#ifdef	NEOPIXEL_WS2812
+	px.nbits = 24;
+	px.timings.mark.duration1 = 14;
+	px.timings.space.duration0 = 7;
+	px.timings.space.duration1 = 16;
+	px.timings.reset.duration0 = 600;
+	px.timings.reset.duration1 = 600;
+#endif
+#ifdef	NEOPIXEL_SK6812
+	px.nbits = 32;
+	px.timings.mark.duration1 = 12;
+	px.timings.space.duration0 = 6;
+	px.timings.space.duration1 = 18;
+	px.timings.reset.duration0 = 900;
+	px.timings.reset.duration1 = 900;
+#endif
+	px.brightness = 0x80;
+	for	( i = 1 ; i < NR_LED - 1 ; i ++ )	{
+		np_set_pixel_rgbw(&px, i , 100, 0, 0, 50);
+	}
+
+	np_show(&px, NEOPIXEL_RMT_CHANNEL);
+    
+    ESP_LOGI(TAG, "getting here (end) rc = %d", rc);
 }
 
 /**
@@ -233,21 +368,21 @@ void led_strip_deinit(void)
 /**
  * @brief turn on/off the lowlevel led_strip
  */
-int led_strip_set_on(int num, bool value, bool *segment_on, bool *leds_changed, uint32_t *segment_intensity, uint32_t *segment_intensity_off)
+int led_strip_set_on(int num, bool value)
 {
     ESP_LOGI(TAG, "led_strip_set_on num : %d", num);
     ESP_LOGI(TAG, "led_strip_set_on : %s", value == true ? "true" : "false");
 
-    if(*segment_on == true && value == false){
-        *segment_intensity_off = *segment_intensity;
-        *segment_intensity = 0;
-        *segment_on = false;
-        *leds_changed = true;
+    if(segment_on[num] == true && value == false){
+        segment_intensity_off[num] = segment_intensity[num];
+        segment_intensity[num] = 0;
+        segment_on[num] = false;
+        led_strip_update();
     }
-    if(*segment_on == false && value == true){
-        *segment_intensity = *segment_intensity_off;
-        *segment_on = true;
-        *leds_changed = true;
+    if(segment_on[num] == false && value == true){
+        segment_intensity[num] = segment_intensity_off[num];
+        segment_on[num] = true;
+        led_strip_update();
     }
 
     return 0;
@@ -256,14 +391,14 @@ int led_strip_set_on(int num, bool value, bool *segment_on, bool *leds_changed, 
 /**
  * @brief set the saturation of the lowlevel led_strip
  */
-int led_strip_set_saturation(int num, float value, bool *segment_on, bool *leds_changed, uint32_t *segment_saturation)
+int led_strip_set_saturation(int num, float value)
 {
     ESP_LOGI(TAG, "led_strip_set_saturation : %f", value);
-    *segment_saturation = value / 100;
+    segment_saturation[num] = value / 100;
     
-    if (*segment_on == true)
+    if (segment_on[num] == true)
     {
-        *leds_changed = true;
+        led_strip_update();
     }
     // s_hsb_val.s = value;
     // if (true == s_on)
@@ -275,14 +410,14 @@ int led_strip_set_saturation(int num, float value, bool *segment_on, bool *leds_
 /**
  * @brief set the hue of the lowlevel led_strip
  */
-int led_strip_set_hue(int num, float value, bool *segment_on, bool *leds_changed, uint32_t *segment_hue)
+int led_strip_set_hue(int num, float value)
 {
     ESP_LOGI(TAG, "led_strip_set_hue : %f", value);
-    *segment_hue = value;
+    segment_hue[num] = value;
     
-    if (*segment_on == true)
+    if (segment_on[num] == true)
     {
-        *leds_changed = true;
+        led_strip_update();
     }
     // s_hsb_val.h = value;
     // if (true == s_on)
@@ -294,14 +429,14 @@ int led_strip_set_hue(int num, float value, bool *segment_on, bool *leds_changed
 /**
  * @brief set the brightness of the lowlevel led_strip
  */
-int led_strip_set_brightness(int num, int value, bool *segment_on, bool *leds_changed, uint32_t *segment_intensity)
+int led_strip_set_brightness(int num, int value)
 {
     ESP_LOGI(TAG, "led_strip_set_brightness : %d", value);
-    *segment_intensity = value / 100;
+    segment_intensity[num] = value / 100;
     
-    if (*segment_on == true)
+    if (segment_on[num] == true)
     {
-        *leds_changed = true;
+        led_strip_update();
     }
 
     // s_hsb_val.b = value;

@@ -41,21 +41,11 @@
 #include <app_wifi.h>
 #include <app_hap_setup_payload.h>
 
-#include <driver/rmt.h>
-#include "neopixel.c"
 
+#include "led_strip.h"
 
 /* Comment out the below line to disable Firmware Upgrades */
 #define CONFIG_FIRMWARE_SERVICE
-
-static const char *TAG = "HAP led_strip";
-
-#define	NEOPIXEL_PORT	18
-#define	NR_LED		7
-//#define	NR_LED		3
-//#define	NEOPIXEL_WS2812
-#define	NEOPIXEL_SK6812
-#define	NEOPIXEL_RMT_CHANNEL    RMT_CHANNEL_2
 
 #define LED_STRIP_TASK_PRIORITY  1
 #define LED_STRIP_TASK_STACKSIZE 4 * 1024
@@ -64,7 +54,6 @@ static const char *TAG = "HAP led_strip";
 
 #define NUM_BRIDGED_ACCESSORIES 3
 
-#define NUM_LED_SEGMENTS NUM_BRIDGED_ACCESSORIES
 
 /* Reset network credentials if button is pressed for more than 3 seconds and then released */
 #define RESET_NETWORK_BUTTON_TIMEOUT        3
@@ -106,8 +95,6 @@ pixel_settings_t px;
 	int		rc;
 
 
-
-
 /**
  * @brief The network reset button callback handler.
  * Useful for testing the Wi-Fi re-configuration feature of WAC2
@@ -124,47 +111,6 @@ static void reset_to_factory_handler(void* arg)
     hap_reset_to_factory();
 }
 
-void hsi2rgbw(float H, float S, float I, int rgbw[]) {
-  int r, g, b, w;
-  float cos_h, cos_1047_h;
-//   H = fmod(H,360); // cycle H around to 0-360 degrees
-  H = 3.14159*H/(float)180; // Convert to radians.
-  S = S / 100;
-  I = I / 100;
-  S = S>0?(S<1?S:1):0; // clamp S and I to interval [0,1]
-  I = I>0?(I<1?I:1):0;
-  
-  if(H < 2.09439) {
-    cos_h = cos(H);
-    cos_1047_h = cos(1.047196667-H);
-    r = S*255*I/3*(1+cos_h/cos_1047_h);
-    g = S*255*I/3*(1+(1-cos_h/cos_1047_h));
-    b = 0;
-    w = 255*(1-S)*I;
-  } else if(H < 4.188787) {
-    H = H - 2.09439;
-    cos_h = cos(H);
-    cos_1047_h = cos(1.047196667-H);
-    g = S*255*I/3*(1+cos_h/cos_1047_h);
-    b = S*255*I/3*(1+(1-cos_h/cos_1047_h));
-    r = 0;
-    w = 255*(1-S)*I;
-  } else {
-    H = H - 4.188787;
-    cos_h = cos(H);
-    cos_1047_h = cos(1.047196667-H);
-    b = S*255*I/3*(1+cos_h/cos_1047_h);
-    r = S*255*I/3*(1+(1-cos_h/cos_1047_h));
-    g = 0;
-    w = 255*(1-S)*I;
-  }
-  
-  rgbw[0]=r;
-  rgbw[1]=g;
-  rgbw[2]=b;
-  rgbw[3]=w;
-
-}
 
 /**
  * The Reset button  GPIO initialisation function.
@@ -442,6 +388,7 @@ static int led_strip_write(hap_write_data_t write_data[], int count,
         *(write->status) = HAP_STATUS_VAL_INVALID;
         if (!strcmp(hap_char_get_type_uuid(write->hc), HAP_CHAR_UUID_ON)) {
             ESP_LOGI(TAG, "Received Write for Light %s", write->val.b ? "On" : "Off");
+
             if(segment_on[num] == true && write->val.b == false){
                 segment_intensity_off[num] = segments[num][2];
                 segments[num][2] = 0;
@@ -472,11 +419,13 @@ static int led_strip_write(hap_write_data_t write_data[], int count,
             // }
         } else if (!strcmp(hap_char_get_type_uuid(write->hc), HAP_CHAR_UUID_HUE)) {
             ESP_LOGI(TAG, "Received Write for Light Hue %f", write->val.f);
+
             segments[num][0] = write->val.f;
     
             if (segment_on[num] == true)
             {
                 xQueueSend(led_queue,&segments,(TickType_t )(1000/portTICK_PERIOD_MS));
+
                 *(write->status) = HAP_STATUS_SUCCESS;
             }
             // if (led_strip_set_hue(num, write->val.f, &segment_on[num], &leds_changed, &segment_hue[num]) == 0) {
@@ -484,11 +433,13 @@ static int led_strip_write(hap_write_data_t write_data[], int count,
             // }
         } else if (!strcmp(hap_char_get_type_uuid(write->hc), HAP_CHAR_UUID_SATURATION)) {
             ESP_LOGI(TAG, "Received Write for Light Saturation %f", write->val.f);
+
             segments[num][1] = write->val.f;
     
             if (segment_on[num] == true)
             {
                 xQueueSend(led_queue,&segments,(TickType_t )(1000/portTICK_PERIOD_MS));
+
                 *(write->status) = HAP_STATUS_SUCCESS;
             }
             // if (led_strip_set_saturation(num, write->val.f, &segment_on[num], &leds_changed, &segment_saturation[num]) == 0) {
@@ -510,6 +461,7 @@ static int led_strip_write(hap_write_data_t write_data[], int count,
 }
 
 /*The main thread for handling the Bridge Accessory */
+
 static void leds_thread_entry(void *p)
 {
     /* Initialize the Light Bulb Hardware */
@@ -584,6 +536,7 @@ static void leds_thread_entry(void *p)
     
 }
 /*The main thread for handling the Bridge Accessory */
+
 static void bridge_thread_entry(void *p)
 {
     hap_acc_t *accessory;
@@ -707,6 +660,7 @@ static void bridge_thread_entry(void *p)
 
 void app_main()
 {
+
     led_queue = xQueueCreate( queueSize, sizeof( int ) );
     xTaskCreate(leds_thread_entry, LED_STRIP_LEDS_TASK_NAME, LED_STRIP_TASK_STACKSIZE, NULL, LED_STRIP_TASK_PRIORITY, NULL);
     xTaskCreate(bridge_thread_entry, LED_STRIP_BRIDGE_TASK_NAME, LED_STRIP_TASK_STACKSIZE, NULL, LED_STRIP_TASK_PRIORITY, NULL);
