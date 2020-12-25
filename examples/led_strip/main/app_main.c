@@ -573,9 +573,6 @@ static void leds_thread_entry(void *p)
                 int end_at_led = segment_center[segment + 1];
                 int leds_in_segment = end_at_led - start_at_led + 1;
                 
-                if(segment == 0){
-                    start_at_0++;
-                }
                 uint32_t current_hue_step_size = (segments[segment + 1][0] - segments[segment][0]) / leds_in_segment;
                 uint32_t current_saturation_step_size = (segments[segment + 1][1] - segments[segment][1]) / leds_in_segment;
                 uint32_t current_intensity_step_size = (segments[segment + 1][2] - segments[segment][2]) / leds_in_segment;
@@ -594,6 +591,9 @@ static void leds_thread_entry(void *p)
                     }
                     hsi2rgbw(current_hue, current_saturation, current_intensity, &rgbw);
                     np_set_pixel_rgbw(&px, current_led, rgbw[0], rgbw[1], rgbw[2], rgbw[3]);                
+                }
+                if(segment == 0){
+                    start_at_0++;
                 }
             }
             np_show(&px, NEOPIXEL_RMT_CHANNEL);
