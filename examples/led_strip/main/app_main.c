@@ -450,7 +450,7 @@ static int led_strip_write(hap_write_data_t write_data[], int count,
                 xQueueSend(led_queue,&segments,(TickType_t )(1000/portTICK_PERIOD_MS));
                 *(write->status) = HAP_STATUS_SUCCESS;
             }
-            if(segment_on[num] == false && write->val.b == true){
+            else if(segment_on[num] == false && write->val.b == true){
                 segments[num][2] = segment_intensity_off[num];
                 segment_on[num] = true;
                 xQueueSend(led_queue,&segments,(TickType_t )(1000/portTICK_PERIOD_MS));
@@ -563,30 +563,37 @@ static void leds_thread_entry(void *p)
     ESP_LOGI(TAG, "getting here (end) rc = %d", rc);
     for(;;)
     {
-        xQueueReceive(led_queue,&segments,(TickType_t )(1000/portTICK_PERIOD_MS));
-        ESP_LOGI(TAG, "leds_changed %d", rc);
-        for(int segment = 0; segment < NUM_LED_SEGMENTS - 1; segment++)
+        if(xQueueReceive(led_queue,&segments,(TickType_t )(1000/portTICK_PERIOD_MS)))
         {
-            int start_at_led = segment_center[segment];
-            int end_at_led = segment_center[segment + 1];
-            int leds_in_segment = end_at_led - start_at_led;
-            int start_at_0 = 1;
-            if(segment  == 0){
-                start_at_0 = 0;
-            }
-            for(int led = start_at_0; led < leds_in_segment; led++)
+            ESP_LOGI(TAG, "leds_changed %d", rc);
+            for(int segment = 0; segment < NUM_LED_SEGMENTS - 1; segment++)
             {
-                uint32_t current_hue = segments[segment][0] + (segments[segment + 1][0] - segments[segment][0]) / leds_in_segment * led;
-                uint32_t current_saturation = segments[segment][1] + (segments[segment + 1][1] - segments[segment][1]) / leds_in_segment * led;
-                uint32_t current_intensity = segments[segment][2] + (segments[segment + 1][2] - segments[segment][2]) / leds_in_segment * led;
-                int current_led = start_at_led + led;
-                int rgbw[4];
-                hsi2rgbw(current_hue, current_saturation, current_intensity, &rgbw);
-                np_set_pixel_rgbw(&px, current_led, rgbw[0], rgbw[1], rgbw[2], rgbw[3]);                
+                int start_at_led = segment_center[segment];
+                int end_at_led = segment_center[segment + 1];
+                int leds_in_segment = end_at_led - start_at_led;
+                int start_at_0 = 1;
+                if(segment  == 0){
+                    start_at_0 = 0;
+                }
+                for(int led = start_at_0; led < leds_in_segment; led++)
+                {
+                    uint32_t current_hue = segments[segment][0] + (segments[segment + 1][0] - segments[segment][0]) / leds_in_segment * led;
+                    uint32_t current_saturation = segments[segment][1] + (segments[segment + 1][1] - segments[segment][1]) / leds_in_segment * led;
+                    uint32_t current_intensity = segments[segment][2] + (segments[segment + 1][2] - segments[segment][2]) / leds_in_segment * led;
+                    int current_led = start_at_led + led;
+                    int rgbw[4];
+                    if (current_hue >= 360){
+                        current_hue = current_hue - 360;
+                    }
+                    else if (current_hue < 0){
+                        current_hue = 360 + current_hue;
+                    }
+                    hsi2rgbw(current_hue, current_saturation, current_intensity, &rgbw);
+                    np_set_pixel_rgbw(&px, current_led, rgbw[0], rgbw[1], rgbw[2], rgbw[3]);                
+                }
             }
+            np_show(&px, NEOPIXEL_RMT_CHANNEL);
         }
-        np_show(&px, NEOPIXEL_RMT_CHANNEL);
-
         vTaskDelay(10/portTICK_PERIOD_MS); //wait for a second
     }
     
