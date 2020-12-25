@@ -42,7 +42,11 @@
 #include <app_hap_setup_payload.h>
 
 
-#include "led_strip.h"
+#include <driver/rmt.h>
+#include "neopixel.c"
+
+
+// #include "led_strip.h"
 
 /* Comment out the below line to disable Firmware Upgrades */
 #define CONFIG_FIRMWARE_SERVICE
@@ -54,6 +58,8 @@
 
 #define NUM_BRIDGED_ACCESSORIES 3
 
+#define NUM_LED_SEGMENTS NUM_BRIDGED_ACCESSORIES
+
 
 /* Reset network credentials if button is pressed for more than 3 seconds and then released */
 #define RESET_NETWORK_BUTTON_TIMEOUT        3
@@ -64,16 +70,25 @@
 QueueHandle_t led_queue;
 int queueSize = 5;
 
-
+static const char *TAG = "led strip";
 
 
 /* The button "Boot" will be used as the Reset button for the example */
 #define RESET_GPIO  GPIO_NUM_0
 
 
+#define	NEOPIXEL_PORT	18
+#define	NR_LED		7
+//#define	NR_LED		3
+//#define	NEOPIXEL_WS2812
+#define	NEOPIXEL_SK6812
+#define	NEOPIXEL_RMT_CHANNEL    RMT_CHANNEL_2
+
+
 #define DEG_TO_RAD(X) (M_PI*(X)/180)
 
 int segment_center[] = {0,3,6};
+
 
 uint32_t segment_hue[NUM_LED_SEGMENTS];
 uint32_t segment_saturation[NUM_LED_SEGMENTS];
@@ -86,13 +101,52 @@ uint32_t segments[NUM_LED_SEGMENTS][3];
 bool leds_changed = false;
 
 
-#include "led_strip.h"
-
-
 pixel_settings_t px;
 	uint32_t		pixels[NR_LED];
 	int		i;
 	int		rc;
+
+void hsi2rgbw(float H, float S, float I, int rgbw[]) {
+  int r, g, b, w;
+  float cos_h, cos_1047_h;
+//   H = fmod(H,360); // cycle H around to 0-360 degrees
+  H = 3.14159*H/(float)180; // Convert to radians.
+  S = S / 100;
+  I = I / 100;
+  S = S>0?(S<1?S:1):0; // clamp S and I to interval [0,1]
+  I = I>0?(I<1?I:1):0;
+  
+  if(H < 2.09439) {
+    cos_h = cos(H);
+    cos_1047_h = cos(1.047196667-H);
+    r = S*255*I/3*(1+cos_h/cos_1047_h);
+    g = S*255*I/3*(1+(1-cos_h/cos_1047_h));
+    b = 0;
+    w = 255*(1-S)*I;
+  } else if(H < 4.188787) {
+    H = H - 2.09439;
+    cos_h = cos(H);
+    cos_1047_h = cos(1.047196667-H);
+    g = S*255*I/3*(1+cos_h/cos_1047_h);
+    b = S*255*I/3*(1+(1-cos_h/cos_1047_h));
+    r = 0;
+    w = 255*(1-S)*I;
+  } else {
+    H = H - 4.188787;
+    cos_h = cos(H);
+    cos_1047_h = cos(1.047196667-H);
+    b = S*255*I/3*(1+cos_h/cos_1047_h);
+    r = S*255*I/3*(1+(1-cos_h/cos_1047_h));
+    g = 0;
+    w = 255*(1-S)*I;
+  }
+  
+  rgbw[0]=r;
+  rgbw[1]=g;
+  rgbw[2]=b;
+  rgbw[3]=w;
+
+}
 
 
 /**
