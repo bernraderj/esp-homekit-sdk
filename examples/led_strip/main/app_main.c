@@ -565,8 +565,25 @@ static void leds_thread_entry(void *p)
             int segment_led = 0;
             int leds_in_segment = 4;
             int current_segment = 0;
-            float current_hue_step_size = (segments[1][0] - segments[0][0]) / leds_in_segment;
+            float hue_diff = segments[1][0] - segments[0][0];
+            if (hue_diff > 180){
+                hue_diff = - 360 - hue_diff;
+            }
+            else if (hue_diff < -180)
+            {
+                hue_diff = 360 + hue_diff;
+            }
+            float current_hue_step_size = hue_diff / leds_in_segment;
             float current_saturation_step_size = (segments[1][1] - segments[0][1]) / leds_in_segment;
+            if (segments[0][2] == 0)
+            {
+                current_hue_step_size = segments[1][0] / leds_in_segment;
+                current_saturation_step_size = segments[1][1] / leds_in_segment;
+            }
+            else if(segments[1][2] == 0){
+                current_hue_step_size = segments[0][0] / leds_in_segment;
+                current_saturation_step_size = segments[0][1] / leds_in_segment;
+            }
             float current_intensity_step_size = (segments[1][2] - segments[0][2]) / leds_in_segment;
             for(int led = 0; led < NR_LED; led++){
                 float current_hue;
@@ -574,9 +591,26 @@ static void leds_thread_entry(void *p)
                 float current_intensity;
                 if (led == 3)
                 {
-                    current_hue_step_size = (segments[2][0] - segments[1][0]) / leds_in_segment;
+                    float hue_diff = segments[2][0] - segments[1][0];
+                    if (hue_diff > 180){
+                        hue_diff = - 360 - hue_diff;
+                    }
+                    else if (hue_diff < -180)
+                    {
+                        hue_diff = 360 + hue_diff;
+                    }
+                    current_hue_step_size = hue_diff / leds_in_segment;
                     current_saturation_step_size = (segments[2][1] - segments[1][1]) / leds_in_segment;
                     current_intensity_step_size = (segments[2][2] - segments[1][2]) / leds_in_segment;
+                    if (segments[1][2] == 0)
+                    {
+                        current_hue_step_size = segments[2][0] / leds_in_segment;
+                        current_saturation_step_size = segments[2][1] / leds_in_segment;
+                    }
+                    else if(segments[2][2] == 0){
+                        current_hue_step_size = segments[1][0] / leds_in_segment;
+                        current_saturation_step_size = segments[1][1] / leds_in_segment;
+                    }
                     segment_led = 0;
                     current_segment = 1;
                 }
