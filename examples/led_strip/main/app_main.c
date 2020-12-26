@@ -90,11 +90,11 @@ static const char *TAG = "led strip";
 int segment_center[] = {0,3,6};
 
 
-uint32_t segment_hue[NUM_LED_SEGMENTS];
-uint32_t segment_saturation[NUM_LED_SEGMENTS];
-uint32_t segment_intensity[NUM_LED_SEGMENTS];
+float segment_hue[NUM_LED_SEGMENTS];
+float segment_saturation[NUM_LED_SEGMENTS];
+float segment_intensity[NUM_LED_SEGMENTS];
 bool segment_on[NUM_LED_SEGMENTS];
-uint32_t segment_intensity_off[NUM_LED_SEGMENTS];
+float segment_intensity_off[NUM_LED_SEGMENTS];
 
 uint32_t segments[NUM_LED_SEGMENTS][3];
 
@@ -567,34 +567,41 @@ static void leds_thread_entry(void *p)
         {
             ESP_LOGI(TAG, "leds_changed %d", rc);
             int start_at_0 = 0;
-            for(int segment = 0; segment < NUM_LED_SEGMENTS - 1; segment++)
-            {
-                int start_at_led = segment_center[segment];
-                int end_at_led = segment_center[segment + 1];
-                int leds_in_segment = end_at_led - start_at_led + 1;
-                
-                uint32_t current_hue_step_size = (segments[segment + 1][0] - segments[segment][0]) / leds_in_segment;
-                uint32_t current_saturation_step_size = (segments[segment + 1][1] - segments[segment][1]) / leds_in_segment;
-                uint32_t current_intensity_step_size = (segments[segment + 1][2] - segments[segment][2]) / leds_in_segment;
-                for(int led = start_at_0; led < leds_in_segment; led++)
+            int current_segment = 0;
+            int segment_led = 0;
+            int leds_in_segment = segment_center[1];
+            int next_segment = segment_center[1];
+            float current_hue_step_size = (segments[1][0] - segments[0][0]) / leds_in_segment;
+            float current_saturation_step_size = (segments[1][1] - segments[0][1]) / leds_in_segment;
+            float current_intensity_step_size = (segments[1][2] - segments[0][2]) / leds_in_segment;
+            for(int led = 0; led < NR_LED; led++){
+                float current_hue;
+                float current_saturation;
+                float current_intensity;
+                if (led == segment_center[next_segment])
                 {
-                    uint32_t current_hue = segments[segment][0] + current_hue_step_size * led;
-                    uint32_t current_saturation = segments[segment][1] + current_saturation_step_size * led;
-                    uint32_t current_intensity = segments[segment][2] + current_intensity_step_size * led;
-                    int current_led = start_at_led + led;
-                    int rgbw[4];
-                    if (current_hue >= 360){
-                        current_hue = current_hue - 360;
+                    current_segment = next_segment;
+                    next_segment++;
+                    if (next_segment < NUM_LED_SEGMENTS){
+                        int leds_in_segment = segment_center[next_segment] - segment_center[current_segment] + 1;
+                        float current_hue_step_size = (segments[next_segment][0] - segments[current_segment][0]) / leds_in_segment;
+                        float current_saturation_step_size = (segments[next_segment][1] - segments[current_segment][1]) / leds_in_segment;
+                        float current_intensity_step_size = (segments[next_segment][2] - segments[current_segment][2]) / leds_in_segment;
                     }
-                    else if (current_hue < 0){
-                        current_hue = 360 + current_hue;
-                    }
-                    hsi2rgbw(current_hue, current_saturation, current_intensity, &rgbw);
-                    np_set_pixel_rgbw(&px, current_led, rgbw[0], rgbw[1], rgbw[2], rgbw[3]);                
+                    segment_led = 0;
                 }
-                if(segment == 0){
-                    start_at_0++;
+                current_hue = segments[current_segment][0] + current_hue_step_size * segment_led;
+                current_saturation = segments[current_segment][1] + current_saturation_step_size * segment_led;
+                current_intensity = segments[current_segment][2] + current_intensity_step_size * segment_led;
+                int rgbw[4];
+                if (current_hue >= 360){
+                    current_hue = current_hue - 360;
                 }
+                else if (current_hue < 0){
+                    current_hue = 360 + current_hue;
+                }
+                hsi2rgbw(current_hue, current_saturation, current_intensity, &rgbw);
+                np_set_pixel_rgbw(&px, led, rgbw[0], rgbw[1], rgbw[2], rgbw[3]);
             }
             np_show(&px, NEOPIXEL_RMT_CHANNEL);
         }
