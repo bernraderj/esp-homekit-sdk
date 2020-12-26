@@ -574,9 +574,9 @@ static void leds_thread_entry(void *p)
                 float current_intensity;
                 if (led == 3)
                 {
-                    float current_hue_step_size = (segments[2][0] - segments[1][0]) / leds_in_segment;
-                    float current_saturation_step_size = (segments[2][1] - segments[1][1]) / leds_in_segment;
-                    float current_intensity_step_size = (segments[2][2] - segments[1][2]) / leds_in_segment;
+                    current_hue_step_size = (segments[2][0] - segments[1][0]) / leds_in_segment;
+                    current_saturation_step_size = (segments[2][1] - segments[1][1]) / leds_in_segment;
+                    current_intensity_step_size = (segments[2][2] - segments[1][2]) / leds_in_segment;
                     segment_led = 0;
                     current_segment = 1;
                 }
