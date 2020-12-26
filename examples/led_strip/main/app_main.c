@@ -87,9 +87,6 @@ static const char *TAG = "led strip";
 
 #define DEG_TO_RAD(X) (M_PI*(X)/180)
 
-int segment_center[] = {0,3,6};
-
-
 float segment_hue[NUM_LED_SEGMENTS];
 float segment_saturation[NUM_LED_SEGMENTS];
 float segment_intensity[NUM_LED_SEGMENTS];
@@ -98,7 +95,6 @@ float segment_intensity_off[NUM_LED_SEGMENTS];
 
 uint32_t segments[NUM_LED_SEGMENTS][3];
 
-bool leds_changed = false;
 
 
 pixel_settings_t px;
@@ -566,11 +562,9 @@ static void leds_thread_entry(void *p)
         if(xQueueReceive(led_queue,&segments,(TickType_t )(1000/portTICK_PERIOD_MS)))
         {
             ESP_LOGI(TAG, "leds_changed %d", rc);
-            int start_at_0 = 0;
-            int current_segment = 0;
             int segment_led = 0;
-            int leds_in_segment = segment_center[1];
-            int next_segment = segment_center[1];
+            int leds_in_segment = 4;
+            int current_segment = 0;
             float current_hue_step_size = (segments[1][0] - segments[0][0]) / leds_in_segment;
             float current_saturation_step_size = (segments[1][1] - segments[0][1]) / leds_in_segment;
             float current_intensity_step_size = (segments[1][2] - segments[0][2]) / leds_in_segment;
@@ -578,17 +572,18 @@ static void leds_thread_entry(void *p)
                 float current_hue;
                 float current_saturation;
                 float current_intensity;
-                if (led == segment_center[next_segment])
+                if (led == 3)
                 {
-                    current_segment = next_segment;
-                    next_segment++;
-                    if (next_segment < NUM_LED_SEGMENTS){
-                        int leds_in_segment = segment_center[next_segment] - segment_center[current_segment] + 1;
-                        float current_hue_step_size = (segments[next_segment][0] - segments[current_segment][0]) / leds_in_segment;
-                        float current_saturation_step_size = (segments[next_segment][1] - segments[current_segment][1]) / leds_in_segment;
-                        float current_intensity_step_size = (segments[next_segment][2] - segments[current_segment][2]) / leds_in_segment;
-                    }
+                    float current_hue_step_size = (segments[2][0] - segments[1][0]) / leds_in_segment;
+                    float current_saturation_step_size = (segments[2][1] - segments[1][1]) / leds_in_segment;
+                    float current_intensity_step_size = (segments[2][2] - segments[1][2]) / leds_in_segment;
                     segment_led = 0;
+                    current_segment = 1;
+                }
+                else if (led == 6)
+                {
+                    segment_led = 0;
+                    current_segment = 2;
                 }
                 current_hue = segments[current_segment][0] + current_hue_step_size * segment_led;
                 current_saturation = segments[current_segment][1] + current_saturation_step_size * segment_led;
