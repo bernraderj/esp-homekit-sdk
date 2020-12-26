@@ -597,6 +597,7 @@ static void leds_thread_entry(void *p)
                 }
                 hsi2rgbw(current_hue, current_saturation, current_intensity, &rgbw);
                 np_set_pixel_rgbw(&px, led, rgbw[0], rgbw[1], rgbw[2], rgbw[3]);
+                segment_led++;
             }
             np_show(&px, NEOPIXEL_RMT_CHANNEL);
         }
